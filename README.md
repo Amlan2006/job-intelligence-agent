@@ -5,6 +5,8 @@ provider, Groq fallback, Pydantic validation, structured inference logs, and Pos
 models/migrations. Phase 2 adds company research, evidence grounding, deterministic
 scoring, PostgreSQL persistence, and report retrieval. Phase 3 adds PDF resume
 analysis, normalized profiles, and duplicate-upload reuse.
+Phase 4 adds sourced job analysis, deterministic resume matching, local embeddings,
+and saved opportunity reports.
 
 ## Setup
 
@@ -142,3 +144,56 @@ resume deduplication is global to this single-user database.
 Run `python -m scripts.test_resume` for a synthetic end-to-end test using live Codex
 and PostgreSQL, including duplicate-upload reuse. Add `--file /path/to/resume.pdf`
 to test your own PDF. Normal pytest tests generate PDFs in memory and mock inference.
+
+## Opportunity analysis (Phase 4)
+
+Install updated dependencies, apply `alembic upgrade head`, then submit:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/opportunity/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"company_url":"https://company-domain", "job_url":"https://job-page", "resume_id":"SAVED-RESUME-UUID"}'
+```
+
+The graph researches and scores the company, loads the already-analyzed resume,
+extracts the job, generates/caches skill embeddings, calculates a match, and saves
+the report. High-risk or insufficient company evidence stops matching and returns
+an explicit warning. The job URL is optional: without it the report has no job or
+match score. Failed job extraction returns company research with warnings. Job
+requirements and facts retain their source URL and supporting quotes.
+
+Matching returns strong, partial, and missing requirements, relevant projects,
+talking points, component scores/weights, and location/experience constraints.
+It uses these default weights: required skills 50%, preferred skills 15%, project
+relevance 15%, stated experience 10%, open-source relevance 10%. Components absent
+from the job (preferred requirements or minimum years) are omitted and the weights
+are renormalized. Missing resume projects/contributions earn zero, and unknown
+experience earns zero when a minimum is stated. Scores are heuristics, not hiring
+probabilities. Without supported job skill requirements, the score is null.
+
+Exact skills and naming aliases receive full credit. Directional relationships
+(such as Foundry toward Solidity) and semantic matches receive only half credit.
+Semantic matches require manual review and an adjustable cosine threshold
+(`SEMANTIC_MATCH_THRESHOLD`, default 0.88); this initial threshold is not calibrated
+against hiring outcomes. Location and work authorization eligibility are unverified
+because the current resume schema contains no user preferences or eligibility data.
+Check employer-association warnings for third-party job pages.
+
+[FastEmbed](https://qdrant.github.io/fastembed/) runs the default
+`BAAI/bge-small-en-v1.5` model on local CPU. Its first run downloads the model into
+`.cache/embeddings`; later runs reuse it. Embeddings are cached by text and model
+in PostgreSQL using pgvector. Current matching computes cosine similarity in
+Python over this small cache, rather than running a database nearest-neighbor
+index. If embeddings fail/time out, exact/alias/related matching continues with
+an explicit warning. Worker processes are terminated on cancellation/timeouts.
+
+- `GET /api/v1/opportunities/{opportunity_id}` retrieves a saved report.
+- `GET /api/v1/opportunities?limit=20` lists reports newest first.
+
+`python -m scripts.test_opportunity` runs synthetic company/job pages through live
+Codex, local embeddings, and PostgreSQL, using the synthetic saved resume. It tests
+report retrieval and pgvector storage without relying on changing job postings.
+For real pages use `--company-url URL --job-url URL --resume-id UUID`. The first
+model download can take longer than the default 60-second embedding timeout;
+warm the model or increase `EMBEDDING_TIMEOUT_SECONDS` if necessary. The smoke script
+allows 180 seconds for that initial download.

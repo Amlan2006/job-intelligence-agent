@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     resume_max_characters: int = Field(default=50000, gt=0)
     resume_parse_timeout_seconds: float = Field(default=15, gt=0)
     resume_analysis_timeout_seconds: float = Field(default=180, gt=0)
+    opportunity_timeout_seconds: float = Field(default=360, gt=0)
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_cache_dir: str = ".cache/embeddings"
+    embedding_timeout_seconds: float = Field(default=60, gt=0)
+    semantic_match_threshold: float = Field(default=0.88, gt=0, le=1)
 
 
 @lru_cache
