@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     tavily_api_key: SecretStr = SecretStr("")
     research_timeout_seconds: float = Field(default=240, gt=0)
     company_score_weights: dict[str, int] = Field(default_factory=dict)
+    resume_max_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+    resume_max_pages: int = Field(default=20, gt=0)
+    resume_max_characters: int = Field(default=50000, gt=0)
+    resume_parse_timeout_seconds: float = Field(default=15, gt=0)
+    resume_analysis_timeout_seconds: float = Field(default=180, gt=0)
 
 
 @lru_cache

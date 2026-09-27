@@ -8,9 +8,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.agents.company_research import CompanyResearchAgent
+from app.agents.resume_analyzer import ResumeAnalyzer
 from app.api.routes_company import router as company_routes
+from app.api.routes_resume import router as resume_routes
 from app.config import Settings, get_settings
 from app.db.repositories.company import CompanyRepository
+from app.db.repositories.resume import ResumeRepository
 from app.db.session import create_database
 from app.graph.company import build_company_graph
 from app.graph.graph import build_foundation_graph
@@ -19,6 +22,7 @@ from app.llm.groq import GroqProvider
 from app.llm.router import LLMRouter
 from app.logging import configure_logging
 from app.services.company_scoring import DEFAULT_WEIGHTS
+from app.tools.resume_pdf import ResumePDFParser
 from app.tools.web_search import TavilySearch
 from app.tools.webpage import WebpageFetcher
 
@@ -35,6 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         configure_logging(settings.log_level)
         engine, sessions = create_database(settings.database_url)
         application.state.engine, application.state.sessions = engine, sessions
+        application.state.settings = settings
         try:
             async with httpx.AsyncClient() as client:
                 router = LLMRouter(
@@ -63,12 +68,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 application.state.company_repository = CompanyRepository(sessions)
                 application.state.research_timeout = settings.research_timeout_seconds
+                application.state.resume_repository = ResumeRepository(sessions)
+                application.state.resume_parser = ResumePDFParser(settings)
+                application.state.resume_analyzer = ResumeAnalyzer(router)
                 yield
         finally:
             await engine.dispose()
 
     application = FastAPI(title="Job Intelligence Agent", version="0.1.0", lifespan=lifespan)
     application.include_router(company_routes)
+    application.include_router(resume_routes)
 
     @application.get("/health")
     async def health():

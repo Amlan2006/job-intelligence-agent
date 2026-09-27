@@ -20,7 +20,7 @@ async def check_database():
             transaction = await connection.begin()
             try:
                 revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-                assert revision == "0002", f"Unexpected migration revision: {revision}"
+                assert revision == "0003", f"Unexpected migration revision: {revision}"
                 extension = await connection.scalar(
                     text("SELECT extversion FROM pg_extension WHERE extname = 'vector'")
                 )
