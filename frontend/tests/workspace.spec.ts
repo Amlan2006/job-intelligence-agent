@@ -1,6 +1,58 @@
 import { test, expect } from "@playwright/test";
 import { previewOpportunities, previewResume } from "../src/lib/preview";
 
+test("contact profiles show separate LinkedIn and X links in both views", async ({
+  page,
+}) => {
+  const opportunity = structuredClone(previewOpportunities[0]);
+  opportunity.contacts[0].linkedin_url =
+    "https://www.linkedin.com/in/luthor-test-contact";
+  opportunity.contacts[0].x_url = "https://x.com/luthor_test_contact";
+  await page.route("**/api/backend/**", (route) =>
+    route.fulfill({
+      json: route.request().url().includes("/opportunities?")
+        ? [opportunity]
+        : { status: "ready" },
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Use my workspace" }).click();
+  await expect(page.getByText("Your live workspace · Connected")).toBeVisible();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Contacts", exact: true })
+    .click();
+  const card = page.locator(".contact-card");
+  await expect(
+    card.getByRole("link", { name: "LinkedIn", exact: true }),
+  ).toHaveAttribute("href", opportunity.contacts[0].linkedin_url);
+  await expect(
+    card.getByRole("link", { name: "X", exact: true }),
+  ).toHaveAttribute("href", opportunity.contacts[0].x_url);
+  await expect(
+    card.getByRole("link", { name: "X", exact: true }),
+  ).toHaveAttribute("target", "_blank");
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Overview", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Arcana Senior Frontend Engineer" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Contacts", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("link", { name: "LinkedIn", exact: true }),
+  ).toHaveAttribute("href", opportunity.contacts[0].linkedin_url);
+  await expect(
+    page.getByRole("dialog").getByRole("link", { name: "X", exact: true }),
+  ).toHaveAttribute("href", opportunity.contacts[0].x_url);
+});
+
 test("preview is explicit and navigation, saving and search work", async ({
   page,
 }) => {
@@ -30,6 +82,10 @@ test("preview is explicit and navigation, saving and search work", async ({
     page.getByRole("heading", { name: "Contacts", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".contact-card")).toHaveCount(4);
+  await expect(
+    page.getByText("LinkedIn not found", { exact: true }),
+  ).toHaveCount(4);
+  await expect(page.getByText("X not found", { exact: true })).toHaveCount(4);
 });
 
 test("research detail has evidence, contacts and copyable drafts", async ({
@@ -90,7 +146,9 @@ test("live connection loads API data and research errors are visible", async ({
   await page
     .getByRole("button", { name: "Start research", exact: true })
     .click();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("database error");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "database error",
+  );
 });
 
 test("resume upload uses multipart and displays returned profile", async ({
@@ -116,13 +174,11 @@ test("resume upload uses multipart and displays returned profile", async ({
     .getByRole("navigation")
     .getByRole("button", { name: "My resume" })
     .click();
-  await page
-    .getByLabel("Upload resume PDF")
-    .setInputFiles({
-      name: "resume.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-fixture"),
-    });
+  await page.getByLabel("Upload resume PDF").setInputFiles({
+    name: "resume.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-fixture"),
+  });
   await expect(
     page.getByText("Alex_Morgan_Resume.pdf", { exact: true }),
   ).toBeVisible();

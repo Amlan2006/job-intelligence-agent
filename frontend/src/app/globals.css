@@ -919,10 +919,9 @@ main {
 .table-header,
 .opportunity-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.85fr) minmax(80px, 0.75fr) minmax(
-      90px,
-      1fr
-    ) minmax(110px, 1fr) 22px;
+  grid-template-columns:
+    minmax(190px, 1.85fr) minmax(80px, 0.75fr) minmax(90px, 1fr)
+    minmax(110px, 1fr) 22px;
   align-items: center;
   gap: 15px;
   padding: 0 22px;
@@ -1632,6 +1631,14 @@ form select option {
   min-height: 40px;
   margin-top: 13px;
 }
+.contact-profiles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  font-size: 11px;
+}
 .contact-actions {
   display: flex;
   justify-content: space-between;
@@ -2104,10 +2111,9 @@ form select option {
   }
   .table-header,
   .opportunity-row {
-    grid-template-columns: minmax(145px, 1.6fr) minmax(60px, 0.7fr) minmax(
-        84px,
-        1fr
-      ) 22px;
+    grid-template-columns:
+      minmax(145px, 1.6fr) minmax(60px, 0.7fr) minmax(84px, 1fr)
+      22px;
     gap: 10px;
     padding: 0 17px;
   }

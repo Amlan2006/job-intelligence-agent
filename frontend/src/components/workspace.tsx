@@ -572,12 +572,25 @@ export default function Workspace() {
           {contact.relevance_reason ||
             "Review the collected evidence before reaching out."}
         </p>
+        <div
+          className="contact-profiles"
+          aria-label={`${contact.name} profiles`}
+        >
+          {safeUrl(contact.linkedin_url) ? (
+            <OutLink url={contact.linkedin_url}>LinkedIn</OutLink>
+          ) : (
+            <span className="muted">LinkedIn not found</span>
+          )}
+          {safeUrl(contact.x_url) ? (
+            <OutLink url={contact.x_url}>X</OutLink>
+          ) : (
+            <span className="muted">X not found</span>
+          )}
+          {safeUrl(contact.github_url) && (
+            <OutLink url={contact.github_url}>GitHub</OutLink>
+          )}
+        </div>
         <div className="contact-actions">
-          <OutLink
-            url={contact.linkedin_url || contact.x_url || contact.github_url}
-          >
-            Profile
-          </OutLink>
           <button
             disabled={!!busy}
             className="text-link"
