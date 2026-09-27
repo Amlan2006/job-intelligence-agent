@@ -105,3 +105,12 @@ class CompanyPerson(Base):
     company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), primary_key=True)
     person_id: Mapped[UUID] = mapped_column(ForeignKey("people.id"), primary_key=True)
     contact_json: Mapped[dict] = mapped_column(JSONB)
+
+
+class OutreachRecord(Base):
+    __tablename__ = "outreach_messages"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    opportunity_id: Mapped[UUID] = mapped_column(ForeignKey("opportunities.id"), index=True)
+    research_run_id: Mapped[UUID] = mapped_column(ForeignKey("research_runs.id"))
+    report_json: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

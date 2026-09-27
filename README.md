@@ -246,3 +246,47 @@ are saved in PostgreSQL. Run `python -m scripts.test_contacts COMPANY-UUID` for 
 live Tavily/Codex/database test; optionally add `--resume-id UUID`. Normal tests use
 fixtures and mocked providers, including unsupported profiles, duplicates, former
 employees, recency, ranking, workflow integration, and API behavior.
+
+## Phase 6: personalized outreach drafts
+
+Apply `alembic upgrade head` and restart the backend. Safe opportunity analyses now
+attempt four drafts for the top-ranked contact: LinkedIn connection (up to 300
+characters), LinkedIn DM, X DM and email. Missing contacts or insufficient evidence
+leave outreach empty rather than inventing content. Other outreach failures return
+the opportunity with a warning.
+
+Generate a fresh set for a selected contact from a saved opportunity:
+
+```http
+POST /api/v1/outreach/generate
+Content-Type: application/json
+
+{"opportunity_id": "OPPORTUNITY-UUID", "contact_index": 0}
+```
+
+Retrieve it with `GET /api/v1/outreach/OUTREACH-UUID`. Contact indices are zero-based
+and refer to the saved opportunity's contact list, not the latest discovery snapshot.
+Drafts, evidence references and inference metadata are persisted atomically.
+
+Codex selects relevant IDs from previously grounded company product/jobs/funding
+quotes and resume project/skill quotes. Deterministic templates render those exact
+quotes, so no unverified experience, employment duration, relationship, contact
+achievement or job eligibility is asserted. This first version intentionally uses
+quote-based drafts rather than unrestricted generated prose. Long quotes (over 400
+characters) are excluded; unavailable suitable evidence produces a review error.
+The connection note uses a shorter introduction if the resume quote will not fit.
+
+Risky/insufficient company evidence, conflicting contact identities, missing contact
+evidence and unsupported selected IDs prevent generation. Every result is `draft`
+and requires manual review of factual relevance and current employment. There is no
+sending integration, inferred email address or automated platform access. Resume
+and public evidence supplied to Codex use hosted inference even though the CLI runs
+locally. `OUTREACH_TIMEOUT_SECONDS` configures the generation timeout (default 180).
+The entire opportunity still has its separate overall timeout; increase
+`OPPORTUNITY_TIMEOUT_SECONDS` if a slow full workflow requires more time.
+
+For an API/database smoke using saved company/contact research and a saved resume:
+`python -m scripts.test_outreach COMPANY-UUID RESUME-UUID --local-only` uses a local
+selector with no external inference. Omit `--local-only` only when permitted to send
+the selected evidence to Codex; the live version also verifies inference logs.
+Both modes create a labeled smoke opportunity and stored drafts but send no messages.

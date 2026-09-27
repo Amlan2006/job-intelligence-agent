@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     semantic_match_threshold: float = Field(default=0.88, gt=0, le=1)
     contact_limit: int = Field(default=10, ge=1, le=10)
     contact_timeout_seconds: float = Field(default=150, gt=0)
+    outreach_timeout_seconds: float = Field(default=180, gt=0)
 
 
 @lru_cache

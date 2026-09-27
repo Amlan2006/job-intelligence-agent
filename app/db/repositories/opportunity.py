@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.db.models import Job, LLMRun, Opportunity, ResearchRun, SkillEmbedding
+from app.db.models import Job, LLMRun, Opportunity, OutreachRecord, ResearchRun, SkillEmbedding
 from app.db.repositories.contact import save_snapshot
 from app.schemas.contact import ContactReport
 from app.schemas.opportunity import OpportunityReport
@@ -51,6 +51,16 @@ class OpportunityRepository:
                     for event in events
                 ]
             )
+            if report.outreach:
+                await session.flush()
+                session.add(
+                    OutreachRecord(
+                        id=report.outreach.outreach_id,
+                        opportunity_id=report.opportunity_id,
+                        research_run_id=run_id,
+                        report_json=report.outreach.model_dump(mode="json"),
+                    )
+                )
 
     async def get(self, opportunity_id: UUID):
         async with self.sessions() as session:

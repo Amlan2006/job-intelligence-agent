@@ -10,15 +10,18 @@ from sqlalchemy import text
 from app.agents.company_research import CompanyResearchAgent
 from app.agents.contact_finder import ContactFinder
 from app.agents.job_analyzer import JobAnalyzer
+from app.agents.outreach_writer import OutreachWriter
 from app.agents.resume_analyzer import ResumeAnalyzer
 from app.api.routes_company import router as company_routes
 from app.api.routes_contact import router as contact_routes
 from app.api.routes_opportunity import router as opportunity_routes
+from app.api.routes_outreach import router as outreach_routes
 from app.api.routes_resume import router as resume_routes
 from app.config import Settings, get_settings
 from app.db.repositories.company import CompanyRepository
 from app.db.repositories.contact import ContactRepository
 from app.db.repositories.opportunity import EmbeddingRepository, OpportunityRepository
+from app.db.repositories.outreach import OutreachRepository
 from app.db.repositories.resume import ResumeRepository
 from app.db.session import create_database
 from app.graph.company import build_company_graph
@@ -82,6 +85,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.resume_analyzer = ResumeAnalyzer(router)
                 application.state.opportunity_repository = OpportunityRepository(sessions)
                 application.state.contact_repository = ContactRepository(sessions)
+                application.state.outreach_repository = OutreachRepository(sessions)
+                application.state.outreach_writer = OutreachWriter(
+                    router, settings.outreach_timeout_seconds
+                )
                 application.state.contact_finder = ContactFinder(
                     WebpageFetcher(client),
                     TavilySearch(client, settings.tavily_api_key.get_secret_value()),
@@ -101,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     EmbeddingRepository(sessions),
                     settings.semantic_match_threshold,
                     application.state.contact_finder,
+                    application.state.outreach_writer,
                 )
                 yield
         finally:
@@ -111,6 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(resume_routes)
     application.include_router(opportunity_routes)
     application.include_router(contact_routes)
+    application.include_router(outreach_routes)
 
     @application.get("/health")
     async def health():

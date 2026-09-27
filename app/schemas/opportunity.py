@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from app.schemas.company import CompanyReport
 from app.schemas.contact import Contact
 from app.schemas.job import JobProfile
+from app.schemas.outreach import OutreachReport
 
 
 class OpportunityRequest(BaseModel):
@@ -46,3 +47,4 @@ class OpportunityReport(BaseModel):
     match: MatchReport | None
     warnings: list[str]
     contacts: list[Contact] = Field(default_factory=list)
+    outreach: OutreachReport | None = None

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 
+from app.agents.outreach_writer import OutreachUnavailable
 from app.llm.router import LLMFailure
 from app.llm.telemetry import inference_events
 from app.schemas.opportunity import OpportunityReport
@@ -24,6 +25,8 @@ class OpportunityState(TypedDict, total=False):
     warnings: list[str]
     final_report: OpportunityReport
     contacts: list
+    outreach: object
+    opportunity_id: object
 
 
 def build_opportunity_graph(
@@ -34,6 +37,7 @@ def build_opportunity_graph(
     embedding_repository,
     threshold: float,
     contact_finder=None,
+    outreach_writer=None,
 ):
     async def research_company(state):
         run_id = str(uuid4())
@@ -52,7 +56,7 @@ def build_opportunity_graph(
             event for event in inference_events.get() or [] if event.research_run_id == run_id
         ]
         await company_repository.save(report, events)
-        return {"company": report, "warnings": list(report.warnings)}
+        return {"company": report, "warnings": list(report.warnings), "opportunity_id": uuid4()}
 
     def route_after_company(state):
         if state["company"].assessment in {"High-risk signals detected", "Insufficient evidence"}:
@@ -110,15 +114,32 @@ def build_opportunity_graph(
 
     def generate_report(state):
         report = OpportunityReport(
-            opportunity_id=uuid4(),
+            opportunity_id=state["opportunity_id"],
             resume_id=state["resume"].resume_id,
             company=state["company"],
             job=state.get("job"),
             match=state.get("match"),
             warnings=list(dict.fromkeys(state["warnings"])),
             contacts=state.get("contacts", []),
+            outreach=state.get("outreach"),
         )
         return {"final_report": report}
+
+    async def generate_outreach(state):
+        if outreach_writer is None or not state.get("contacts"):
+            return {}
+        # Draft only for the top-ranked contact; selecting another contact is an explicit API call.
+        opportunity = generate_report(state)["final_report"]
+        try:
+            async with asyncio.timeout(outreach_writer.timeout):
+                report = await outreach_writer.generate(
+                    opportunity, state["resume"], 0, state["research_run_id"]
+                )
+            return {"outreach": report}
+        except (OutreachUnavailable, LLMFailure, TimeoutError):
+            return {
+                "warnings": state["warnings"] + ["OUTREACH_UNAVAILABLE: manual review required"]
+            }
 
     async def find_contacts(state):
         if contact_finder is None:
@@ -142,6 +163,7 @@ def build_opportunity_graph(
         ("no_job", no_job),
         ("generate_report", generate_report),
         ("find_contacts", find_contacts),
+        ("generate_outreach", generate_outreach),
     ):
         graph.add_node(name, node)
     graph.add_edge(START, "research_company")
@@ -151,7 +173,8 @@ def build_opportunity_graph(
     graph.add_edge("analyze_job", "embed_skills")
     graph.add_edge("embed_skills", "match_skills")
     graph.add_edge("match_skills", "find_contacts")
-    graph.add_edge("find_contacts", "generate_report")
+    graph.add_edge("find_contacts", "generate_outreach")
+    graph.add_edge("generate_outreach", "generate_report")
     graph.add_edge("withhold_matching", "generate_report")
     graph.add_edge("no_job", "find_contacts")
     graph.add_edge("generate_report", END)
