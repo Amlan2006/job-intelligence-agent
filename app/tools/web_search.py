@@ -19,7 +19,7 @@ class TavilySearch:
     def __init__(self, client: httpx.AsyncClient, api_key: str, timeout: float = 15):
         self.client, self.api_key, self.timeout = client, api_key, timeout
 
-    async def search(self, query: str) -> list[Source]:
+    async def search(self, query: str, *, start_date=None, end_date=None) -> list[Source]:
         if not self.api_key:
             raise SearchError("Search provider is not configured")
         try:
@@ -29,6 +29,7 @@ class TavilySearch:
                     "query": query,
                     "max_results": 5,
                     "include_answer": False,
+                    **({"start_date": start_date, "end_date": end_date} if start_date else {}),
                 },
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 timeout=self.timeout,

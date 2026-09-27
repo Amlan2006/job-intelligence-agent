@@ -9,17 +9,20 @@ from sqlalchemy import text
 
 from app.agents.company_research import CompanyResearchAgent
 from app.agents.contact_finder import ContactFinder
+from app.agents.funding_discovery import TavilyFunding
 from app.agents.job_analyzer import JobAnalyzer
 from app.agents.outreach_writer import OutreachWriter
 from app.agents.resume_analyzer import ResumeAnalyzer
 from app.api.routes_company import router as company_routes
 from app.api.routes_contact import router as contact_routes
+from app.api.routes_discovery import router as discovery_routes
 from app.api.routes_opportunity import router as opportunity_routes
 from app.api.routes_outreach import router as outreach_routes
 from app.api.routes_resume import router as resume_routes
 from app.config import Settings, get_settings
 from app.db.repositories.company import CompanyRepository
 from app.db.repositories.contact import ContactRepository
+from app.db.repositories.discovery import DiscoveryRepository
 from app.db.repositories.opportunity import EmbeddingRepository, OpportunityRepository
 from app.db.repositories.outreach import OutreachRepository
 from app.db.repositories.resume import ResumeRepository
@@ -32,7 +35,10 @@ from app.llm.groq import GroqProvider
 from app.llm.router import LLMRouter
 from app.logging import configure_logging
 from app.services.company_scoring import DEFAULT_WEIGHTS
+from app.services.discovery import DiscoveryService
 from app.services.embeddings import LocalEmbeddings
+from app.tools.defillama import DefiLlamaFunding
+from app.tools.job_discovery import JobDiscovery
 from app.tools.resume_pdf import ResumePDFParser
 from app.tools.web_search import TavilySearch
 from app.tools.webpage import WebpageFetcher
@@ -47,7 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
-        configure_logging(settings.log_level)
+        configure_logging(settings.log_level, [settings.defillama_api_key.get_secret_value()])
         engine, sessions = create_database(settings.database_url)
         application.state.engine, application.state.sessions = engine, sessions
         application.state.settings = settings
@@ -110,6 +116,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     application.state.contact_finder,
                     application.state.outreach_writer,
                 )
+                application.state.discovery_repository = DiscoveryRepository(sessions)
+                application.state.discovery_service = DiscoveryService(
+                    {
+                        "tavily": TavilyFunding(
+                            TavilySearch(client, settings.tavily_api_key.get_secret_value()),
+                            WebpageFetcher(client),
+                            router,
+                            settings.funding_discovery_timeout_seconds,
+                        ),
+                        "defillama": DefiLlamaFunding(
+                            client, settings.defillama_api_key.get_secret_value()
+                        ),
+                    },
+                    application.state.discovery_repository,
+                    application.state.resume_repository,
+                    application.state.opportunity_repository,
+                    application.state.opportunity_graph,
+                    JobDiscovery(WebpageFetcher(client)),
+                    settings.discovery_company_timeout_seconds,
+                )
                 yield
         finally:
             await engine.dispose()
@@ -120,6 +146,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(opportunity_routes)
     application.include_router(contact_routes)
     application.include_router(outreach_routes)
+    application.include_router(discovery_routes)
 
     @application.get("/health")
     async def health():

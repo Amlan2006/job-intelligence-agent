@@ -21,6 +21,7 @@ Signal = Literal[
 
 
 class Source(BaseModel):
+    link_labels: dict[str, str] = Field(default_factory=dict)
     id: str
     source_name: str
     source_url: str

@@ -290,3 +290,106 @@ For an API/database smoke using saved company/contact research and a saved resum
 selector with no external inference. Omit `--local-only` only when permitted to send
 the selected evidence to Codex; the live version also verifies inference logs.
 Both modes create a labeled smoke opportunity and stored drafts but send no messages.
+
+## Phase 7: startup discovery
+
+Tavily is the default funding-discovery source and uses your existing `TAVILY_API_KEY`.
+Apply `alembic upgrade head` and restart the backend. DefiLlama remains optional:
+set `DEFILLAMA_API_KEY` and request `"source":"defillama"` to use its feed.
+DefiLlama's documented
+[raises endpoint requires its API plan](https://github.com/DefiLlama/api-docs/blob/main/llms-pro.txt).
+Missing credentials return a saved failed report with `TAVILY_API_KEY_REQUIRED` or
+`DEFILLAMA_API_KEY_REQUIRED` and HTTP 503, depending on the selected provider.
+
+```http
+POST /api/v1/discovery/run
+Content-Type: application/json
+
+{"resume_id":"RESUME-UUID","lookback_days":90,"limit":3,"categories":["DeFi"]}
+```
+
+Tavily runs three date-filtered searches and fetches up to eight distinct linked
+pages. Codex extracts candidate rounds from fetched pages, then deterministic checks
+require exact excerpts naming the company, funding event and explicit full event
+date. Publication dates, retrieval dates and snippets alone are insufficient. USD
+amounts, round labels, investors and categories must occur in the supporting quote;
+missing fields stay unknown. Amounts additionally need an adjacent raise verb to
+avoid confusing valuations with round sizes. Exact excerpts and inference metadata
+are retained in discovery history. This is source-backed extraction, not independent
+confirmation of the publisher's claims. Strict date/quote checks reduce coverage.
+`FUNDING_DISCOVERY_TIMEOUT_SECONDS` bounds search/fetch/extraction (default 240).
+
+The optional DefiLlama adapter normalizes `/api/raises` amounts from USD millions to USD, preserves
+announcement dates, investors and source links, and deduplicates funding rounds.
+Undisclosed amounts stay null; invalid/future/undated announcements are not treated
+as recent funding. Conflicting amounts remain unknown. Category filters use exact,
+case-insensitive labels; omit categories to consider all categories.
+
+For Tavily, websites require a company-named hyperlink in the fetched announcement;
+unproven websites remain unresolved. With DefiLlama, websites are resolved by ID against its public protocol registry,
+or an unambiguous exact name when no ID is provided. There is no guessed website.
+Companies absent from that registry appear as unresolved (up to 20 per run). You can
+supply an explicit mapping and optionally a job URL:
+
+```json
+{
+  "resume_id": "RESUME-UUID",
+  "targets": {
+    "Exact funding company name": {
+      "company_url": "https://example.com",
+      "job_url": "https://example.com/jobs/backend-engineer"
+    }
+  }
+}
+```
+
+Mappings only apply to companies present in the filtered funding feed. Each resolved
+company goes through the existing company research, job matching, contact and draft
+workflow. Job discovery follows links from the company homepage through up to two
+careers pages or supported public job boards, choosing the first plausible individual
+listing. It does not search all openings for the best fit. Without a usable job,
+the report retains company/contact research and leaves job matching unknown.
+Existing public-URL validation applies to every fetched destination.
+
+`GET /api/v1/discovery/runs?resume_id=RESUME-UUID` lists history;
+`GET /api/v1/discovery/runs/DISCOVERY-UUID` retrieves progress and ranked results.
+Each analyzed result links to its saved opportunity, which contains contacts and
+any generated outreach. Runs are synchronous and can take several minutes;
+`DISCOVERY_COMPANY_TIMEOUT_SECONDS` bounds each company (default 600). `limit`
+bounds new analysis attempts (1–10), not cached companies. Company failures return
+partial results and are retryable. Provider failures return HTTP 503. Concurrent
+runs for the same resume return HTTP 409.
+
+Ranking uses the planned weights: resume match 30, funding recency 20, exact/alias
+engineering-stack overlap 15, retrieved job listing 15, engineering activity 10,
+and growth 10. Funding receives full credit up to 30 days and half through 90 days;
+funding-name mismatches earn no funding credit. Activity and growth currently lack
+dedicated evidence collectors and remain unknown. Unknown components are reported
+with evidence coverage and earn no points; weights are not redistributed, and no
+evidence means a null score. This version therefore tops out at 80/100. Risky or
+insufficient company evidence withholds the ranking. Scores prioritize research,
+not hiring probability; a retrieved job can still be stale.
+
+Run recurring discovery with a local worker:
+
+```bash
+source .venv/bin/activate
+python -m scripts.run_discovery RESUME-UUID --watch --interval-hours 24 --limit 3
+```
+
+Omit `--watch` for one run; use `--source defillama` for the optional provider.
+The worker runs only while its process is alive; no
+system scheduler is installed or automatically enabled. PostgreSQL checkpoints
+skip completed company/round/resume/job combinations across restarts; new rounds
+and new resumes are processed again. Use `force_refresh: true` in the API to
+deliberately repeat completed work. Only the most recent eligible round per company
+is researched in a run. The opportunity and its checkpoint commit atomically;
+interrupted runs retain saved progress and are marked partial when the next worker
+acquires that resume's lock. Failed companies retry on subsequent runs.
+
+`python -m scripts.test_discovery` tests the full graph, database, API retrieval,
+locking and repeated-run deduplication using synthetic provider fixtures. It writes
+labeled synthetic resume/company/opportunity records, with no external inference
+or search calls. Unit/integration tests cover source errors, normalization, filters,
+missing evidence, ranking, cancellation and retry behavior. Live inference follows
+the existing Codex/Groq configuration; this phase does not change that configuration.

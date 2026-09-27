@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     contact_limit: int = Field(default=10, ge=1, le=10)
     contact_timeout_seconds: float = Field(default=150, gt=0)
     outreach_timeout_seconds: float = Field(default=180, gt=0)
+    defillama_api_key: SecretStr = SecretStr("")
+    funding_discovery_timeout_seconds: float = Field(default=240, gt=0)
+    discovery_company_timeout_seconds: float = Field(default=600, gt=0)
 
 
 @lru_cache

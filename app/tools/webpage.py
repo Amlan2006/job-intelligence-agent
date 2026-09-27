@@ -42,6 +42,9 @@ class PageParser(HTMLParser):
         super().__init__()
         self.parts, self.links = [], []
         self.hidden = 0
+        self.anchor = None
+        self.anchor_text = []
+        self.link_labels = {}
 
     def handle_starttag(self, tag, attrs):
         if tag in {"script", "style", "noscript"}:
@@ -50,14 +53,20 @@ class PageParser(HTMLParser):
             href = dict(attrs).get("href")
             if href:
                 self.links.append(href)
+                self.anchor, self.anchor_text = href, []
 
     def handle_endtag(self, tag):
+        if tag == "a" and self.anchor:
+            self.link_labels[self.anchor] = " ".join(self.anchor_text)
+            self.anchor = None
         if tag in {"script", "style", "noscript"} and self.hidden:
             self.hidden -= 1
 
     def handle_data(self, data):
         if not self.hidden and data.strip():
             self.parts.append(data.strip())
+            if self.anchor:
+                self.anchor_text.append(data.strip())
 
 
 class WebpageFetcher:
@@ -100,6 +109,9 @@ class WebpageFetcher:
                 if not text:
                     raise FetchError("No readable page text")
                 source = Source(
+                    link_labels={
+                        urljoin(url, href): label for href, label in parser.link_labels.items()
+                    },
                     id=source_id,
                     source_name=urlsplit(url).hostname or url,
                     source_url=url,

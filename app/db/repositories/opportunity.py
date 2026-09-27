@@ -3,7 +3,15 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.db.models import Job, LLMRun, Opportunity, OutreachRecord, ResearchRun, SkillEmbedding
+from app.db.models import (
+    DiscoveryCheckpoint,
+    Job,
+    LLMRun,
+    Opportunity,
+    OutreachRecord,
+    ResearchRun,
+    SkillEmbedding,
+)
 from app.db.repositories.contact import save_snapshot
 from app.schemas.contact import ContactReport
 from app.schemas.opportunity import OpportunityReport
@@ -13,7 +21,7 @@ class OpportunityRepository:
     def __init__(self, sessions):
         self.sessions = sessions
 
-    async def save(self, report: OpportunityReport, run_id: UUID, events: list):
+    async def save(self, report: OpportunityReport, run_id: UUID, events: list, discovery_key=None):
         async with self.sessions() as session, session.begin():
             session.add(ResearchRun(id=run_id, status="completed"))
             job_id = uuid4() if report.job else None
@@ -59,6 +67,20 @@ class OpportunityRepository:
                         opportunity_id=report.opportunity_id,
                         research_run_id=run_id,
                         report_json=report.outreach.model_dump(mode="json"),
+                    )
+                )
+
+            if discovery_key:
+                await session.flush()
+                await session.execute(
+                    insert(DiscoveryCheckpoint)
+                    .values(
+                        cache_key=discovery_key,
+                        opportunity_id=report.opportunity_id,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=[DiscoveryCheckpoint.cache_key],
+                        set_={"opportunity_id": report.opportunity_id},
                     )
                 )
 

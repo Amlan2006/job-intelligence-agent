@@ -114,3 +114,23 @@ class OutreachRecord(Base):
     research_run_id: Mapped[UUID] = mapped_column(ForeignKey("research_runs.id"))
     report_json: Mapped[dict] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FundingRoundRecord(Base):
+    __tablename__ = "funding_rounds"
+    funding_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    report_json: Mapped[dict] = mapped_column(JSONB)
+
+
+class DiscoveryRun(Base):
+    __tablename__ = "discovery_runs"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    resume_id: Mapped[UUID] = mapped_column(ForeignKey("resumes.id"), index=True)
+    report_json: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DiscoveryCheckpoint(Base):
+    __tablename__ = "discovery_checkpoints"
+    cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    opportunity_id: Mapped[UUID] = mapped_column(ForeignKey("opportunities.id"))
