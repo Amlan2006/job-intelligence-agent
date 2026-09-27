@@ -58,3 +58,5 @@ graph/API behavior, and safe errors. PostgreSQL and live Codex smoke checks are
 separate operational checks.
 
 Run `python scripts/test_graph.py` for an explicit live Codex-to-LangGraph smoke check.
+Run `python scripts/test_database.py` after migrations to verify pgvector, ORM
+write/read operations, and API readiness. Test rows are rolled back.
