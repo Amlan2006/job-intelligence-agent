@@ -1,5 +1,12 @@
 # Job Intelligence Agent
 
+## Luthor frontend
+
+The responsive Luthor workspace is in [`frontend/`](frontend/README.md).
+Run `npm ci` and `npm run dev` from that directory, then open
+http://127.0.0.1:3000. It starts in a labeled preview mode; choose **Use my
+workspace** to connect to the backend described below.
+
 Phase 1 provides FastAPI, an async LangGraph foundation workflow, a Codex CLI primary
 provider, Groq fallback, Pydantic validation, structured inference logs, and PostgreSQL
 models/migrations. Phase 2 adds company research, evidence grounding, deterministic
