@@ -7,6 +7,7 @@ scoring, PostgreSQL persistence, and report retrieval. Phase 3 adds PDF resume
 analysis, normalized profiles, and duplicate-upload reuse.
 Phase 4 adds sourced job analysis, deterministic resume matching, local embeddings,
 and saved opportunity reports.
+Phase 5 adds source-backed public contact discovery, ranking, and saved contact snapshots.
 
 ## Setup
 
@@ -197,3 +198,51 @@ For real pages use `--company-url URL --job-url URL --resume-id UUID`. The first
 model download can take longer than the default 60-second embedding timeout;
 warm the model or increase `EMBEDDING_TIMEOUT_SECONDS` if necessary. The smoke script
 allows 180 seconds for that initial download.
+
+## Contact discovery (Phase 5)
+
+Apply `alembic upgrade head`. Opportunity analysis now includes up to 10 ranked
+contacts after matching. Discovery also runs when an acceptable company has no job
+URL, using the saved resume's skills; high-risk or insufficient company evidence
+withholds discovery. A contact timeout returns the opportunity with a warning.
+
+To discover contacts for a company already researched, use:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/company/COMPANY-UUID/contacts/discover \
+  -H 'Content-Type: application/json' \
+  -d '{"resume_id":"OPTIONAL-SAVED-RESUME-UUID"}'
+```
+
+Submit `{}` for general engineering-role ranking without resume skill overlap.
+Retrieve the latest snapshot with `GET /api/v1/company/{company_id}/contacts`.
+Historical opportunity reports retain their own contact lists. Older Phase 4 reports
+remain readable and default to an empty contact list.
+
+The finder reads the public homepage and up to two same-domain team/about pages,
+then makes up to three Tavily searches for engineering leaders, founders, recruiters,
+and public X profiles. LinkedIn pages are not fetched or authenticated. Search snippets
+can identify public profiles. Without Tavily, official-page discovery still works,
+but missing profiles remain null. Currently linked profiles on team pages are only
+accepted when the person's source quote includes the URL or the profile itself is
+a collected search-result URL; this conservative rule can reduce coverage.
+
+Codex candidates must have supporting name/role/company evidence. Public-only company
+associations are flagged as potentially outdated; official listings do not guarantee
+current employment. Profile URLs are independently validated against the candidate's
+source. Former-employee references, unsupported skills/URLs, and fabricated facts
+are dropped. Same-name records with conflicting profile URLs remain separate with
+identity warnings. No emails are guessed and no outreach is sent.
+
+Ranking is deterministic: role relevance 30%, role-based authority 25%, exact/alias
+technical overlap with resume skills 20%, company association 15%, recent activity
+10%. Explicitly dated activity within 30 days earns full activity credit, within
+90 days half credit, otherwise zero. Retrieval timestamps never count as activity.
+These are initial heuristic weights; evidence quotes and component values explain
+each result. `CONTACT_LIMIT` and `CONTACT_TIMEOUT_SECONDS` configure count/time limits.
+
+Contacts, people/company associations, discovery snapshots, and inference metadata
+are saved in PostgreSQL. Run `python -m scripts.test_contacts COMPANY-UUID` for a
+live Tavily/Codex/database test; optionally add `--resume-id UUID`. Normal tests use
+fixtures and mocked providers, including unsupported profiles, duplicates, former
+employees, recency, ranking, workflow integration, and API behavior.

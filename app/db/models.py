@@ -82,3 +82,26 @@ class SkillEmbedding(Base):
     text: Mapped[str] = mapped_column(Text, primary_key=True)
     model: Mapped[str] = mapped_column(String(255), primary_key=True)
     embedding: Mapped[list[float]] = mapped_column(Vector())
+
+
+class ContactRun(Base):
+    __tablename__ = "contact_runs"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), index=True)
+    research_run_id: Mapped[UUID] = mapped_column(ForeignKey("research_runs.id"))
+    report_json: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Person(Base):
+    __tablename__ = "people"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    identity_key: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(255))
+
+
+class CompanyPerson(Base):
+    __tablename__ = "company_people"
+    company_id: Mapped[UUID] = mapped_column(ForeignKey("companies.id"), primary_key=True)
+    person_id: Mapped[UUID] = mapped_column(ForeignKey("people.id"), primary_key=True)
+    contact_json: Mapped[dict] = mapped_column(JSONB)

@@ -4,6 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db.models import Job, LLMRun, Opportunity, ResearchRun, SkillEmbedding
+from app.db.repositories.contact import save_snapshot
+from app.schemas.contact import ContactReport
 from app.schemas.opportunity import OpportunityReport
 
 
@@ -24,6 +26,15 @@ class OpportunityRepository:
                     )
                 )
             await session.flush()
+            await save_snapshot(
+                session,
+                ContactReport(
+                    company_id=report.company.company_id,
+                    contacts=report.contacts,
+                    warnings=report.warnings,
+                ),
+                run_id,
+            )
             session.add(
                 Opportunity(
                     id=report.opportunity_id,

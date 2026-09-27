@@ -10,6 +10,7 @@ from app.graph.opportunity import build_opportunity_graph
 from app.main import create_app
 from app.services.embeddings import EmbeddingError
 from app.tools.webpage import FetchError
+from tests.contact_fixtures import contact
 from tests.opportunity_fixtures import company_report, job_profile, resume_report
 
 
@@ -133,3 +134,20 @@ def test_total_timeout_sanitized(opportunity_client):
     response = analyze(client, resume)
     assert response.status_code == 504
     assert response.json()["detail"]["code"] == "OPPORTUNITY_TIMEOUT"
+
+
+def test_contacts_added_after_matching(opportunity_client):
+    client, app, resume, job, embeddings, repo, company_graph = opportunity_client
+    finder = AsyncMock()
+    finder.timeout = 1
+    finder.discover.return_value = ([contact()], [])
+    cache = AsyncMock()
+    cache.get.return_value = {}
+    company_repo = AsyncMock()
+    company_repo.company_id.return_value = company_report().company_id
+    app.state.opportunity_graph = build_opportunity_graph(
+        company_graph, company_repo, job, embeddings, cache, 0.88, finder
+    )
+    response = analyze(client, resume)
+    assert response.status_code == 200 and len(response.json()["contacts"]) == 1
+    finder.discover.assert_awaited_once()

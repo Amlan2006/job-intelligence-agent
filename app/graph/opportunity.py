@@ -1,3 +1,4 @@
+import asyncio
 from typing import TypedDict
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ class OpportunityState(TypedDict, total=False):
     match: object
     warnings: list[str]
     final_report: OpportunityReport
+    contacts: list
 
 
 def build_opportunity_graph(
@@ -31,6 +33,7 @@ def build_opportunity_graph(
     embeddings,
     embedding_repository,
     threshold: float,
+    contact_finder=None,
 ):
     async def research_company(state):
         run_id = str(uuid4())
@@ -113,8 +116,21 @@ def build_opportunity_graph(
             job=state.get("job"),
             match=state.get("match"),
             warnings=list(dict.fromkeys(state["warnings"])),
+            contacts=state.get("contacts", []),
         )
         return {"final_report": report}
+
+    async def find_contacts(state):
+        if contact_finder is None:
+            return {"contacts": []}
+        try:
+            async with asyncio.timeout(contact_finder.timeout):
+                contacts, warnings = await contact_finder.discover(
+                    state["company"], state["resume"].profile.skills, state["research_run_id"]
+                )
+            return {"contacts": contacts, "warnings": state["warnings"] + warnings}
+        except TimeoutError:
+            return {"contacts": [], "warnings": state["warnings"] + ["CONTACT_DISCOVERY_TIMEOUT"]}
 
     graph = StateGraph(OpportunityState)
     for name, node in (
@@ -125,6 +141,7 @@ def build_opportunity_graph(
         ("withhold_matching", withhold_matching),
         ("no_job", no_job),
         ("generate_report", generate_report),
+        ("find_contacts", find_contacts),
     ):
         graph.add_node(name, node)
     graph.add_edge(START, "research_company")
@@ -133,8 +150,9 @@ def build_opportunity_graph(
     )
     graph.add_edge("analyze_job", "embed_skills")
     graph.add_edge("embed_skills", "match_skills")
-    graph.add_edge("match_skills", "generate_report")
+    graph.add_edge("match_skills", "find_contacts")
+    graph.add_edge("find_contacts", "generate_report")
     graph.add_edge("withhold_matching", "generate_report")
-    graph.add_edge("no_job", "generate_report")
+    graph.add_edge("no_job", "find_contacts")
     graph.add_edge("generate_report", END)
     return graph.compile()

@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.schemas.company import CompanyReport
+from app.schemas.contact import Contact
 from app.schemas.job import JobProfile
 
 
@@ -44,3 +45,4 @@ class OpportunityReport(BaseModel):
     job: JobProfile | None
     match: MatchReport | None
     warnings: list[str]
+    contacts: list[Contact] = Field(default_factory=list)
