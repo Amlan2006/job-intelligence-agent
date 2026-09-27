@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     groq_model: str = ""
     groq_timeout_seconds: float = Field(default=30, gt=0)
     log_level: str = "INFO"
+    tavily_api_key: SecretStr = SecretStr("")
+    research_timeout_seconds: float = Field(default=240, gt=0)
+    company_score_weights: dict[str, int] = Field(default_factory=dict)
 
 
 @lru_cache

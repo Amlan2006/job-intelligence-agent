@@ -2,7 +2,8 @@
 
 Phase 1 provides FastAPI, an async LangGraph foundation workflow, a Codex CLI primary
 provider, Groq fallback, Pydantic validation, structured inference logs, and PostgreSQL
-models/migrations. Company research starts in Phase 2.
+models/migrations. Phase 2 adds company research, evidence grounding, deterministic
+scoring, PostgreSQL persistence, and report retrieval.
 
 ## Setup
 
@@ -57,6 +58,45 @@ quota. They cover fallback, validation, timeouts, subprocess cleanup, cancellati
 graph/API behavior, and safe errors. PostgreSQL and live Codex smoke checks are
 separate operational checks.
 
-Run `python scripts/test_graph.py` for an explicit live Codex-to-LangGraph smoke check.
-Run `python scripts/test_database.py` after migrations to verify pgvector, ORM
+Run `python -m scripts.test_graph` for an explicit live Codex-to-LangGraph smoke check.
+Run `python -m scripts.test_database` after migrations to verify pgvector, ORM
 write/read operations, and API readiness. Test rows are rolled back.
+
+## Company research (Phase 2)
+
+Apply the latest migration with `alembic upgrade head`, then use:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/research/company \
+  -H 'Content-Type: application/json' \
+  -d '{"company_url":"https://your-company.example"}'
+```
+
+The graph runs `research_company → score_legitimacy → generate_report`. It reads the
+homepage and up to three linked about/team/careers/product/docs pages, plus up to
+five search snippets. Set `TAVILY_API_KEY` for public search using the
+[Tavily search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+Without the key, official-page research still runs and the report explicitly warns
+that external corroboration was unavailable. Search snippets have lower confidence
+than fetched pages. This is a synchronous bounded research endpoint; allow up to
+`RESEARCH_TIMEOUT_SECONDS` (default 240 seconds).
+
+Model claims must cite an existing source ID and a quote found in its text; claims
+without supporting quotes are dropped. This checks quotation grounding, not whether
+the quoted claim is true. Funding scoring requires the same claim on two distinct
+domains. Unknown facts stay unknown. Missing facts are not negative signals.
+Scores count each signal once, are bounded 0–100, and do not guarantee legitimacy.
+Override individual weights using the JSON `COMPANY_SCORE_WEIGHTS` environment
+variable; defaults live in `app/services/company_scoring.py`.
+
+Reports, evidence, and inference metadata are stored transactionally. Retrieve:
+
+- `GET /api/v1/research/{research_id}` for a specific report.
+- `GET /api/v1/company/{company_id}` for the latest report.
+- `GET /api/v1/company/{company_id}/evidence` for that report's evidence.
+
+For an explicit live test, run `python -m scripts.test_company https://company-domain`.
+This uses Codex quota, optionally Tavily/Groq, and saves a report in PostgreSQL.
+Page fetching supports static HTML, not JavaScript-rendered pages or authenticated
+sites. Private/reserved destinations and redirects to them are rejected; fetches
+have size limits, timeouts, and a redirect cap. The API is intended for local use.

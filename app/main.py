@@ -7,13 +7,20 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from app.agents.company_research import CompanyResearchAgent
+from app.api.routes_company import router as company_routes
 from app.config import Settings, get_settings
+from app.db.repositories.company import CompanyRepository
 from app.db.session import create_database
+from app.graph.company import build_company_graph
 from app.graph.graph import build_foundation_graph
 from app.llm.codex import CodexProvider
 from app.llm.groq import GroqProvider
 from app.llm.router import LLMRouter
 from app.logging import configure_logging
+from app.services.company_scoring import DEFAULT_WEIGHTS
+from app.tools.web_search import TavilySearch
+from app.tools.webpage import WebpageFetcher
 
 
 class FoundationRequest(BaseModel):
@@ -46,11 +53,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     fallback_timeout=settings.groq_timeout_seconds,
                 )
                 application.state.graph = build_foundation_graph(router)
+                application.state.company_graph = build_company_graph(
+                    CompanyResearchAgent(
+                        WebpageFetcher(client),
+                        TavilySearch(client, settings.tavily_api_key.get_secret_value()),
+                        router,
+                    ),
+                    DEFAULT_WEIGHTS | settings.company_score_weights,
+                )
+                application.state.company_repository = CompanyRepository(sessions)
+                application.state.research_timeout = settings.research_timeout_seconds
                 yield
         finally:
             await engine.dispose()
 
     application = FastAPI(title="Job Intelligence Agent", version="0.1.0", lifespan=lifespan)
+    application.include_router(company_routes)
 
     @application.get("/health")
     async def health():

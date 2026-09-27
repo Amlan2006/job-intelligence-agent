@@ -1,8 +1,10 @@
 import logging
+from contextvars import ContextVar
 
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+inference_events: ContextVar[list | None] = ContextVar("inference_events", default=None)
 
 
 class InferenceEvent(BaseModel):
@@ -22,3 +24,6 @@ class InferenceEvent(BaseModel):
 def log_inference(event: InferenceEvent) -> None:
     # Never log prompts, resume contents, credentials, or raw provider errors.
     logger.info("llm_inference", extra={"metadata": event.model_dump()})
+    events = inference_events.get()
+    if events is not None:
+        events.append(event)
