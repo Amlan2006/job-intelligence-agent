@@ -44,6 +44,9 @@ class Contact(BaseModel):
     linkedin_url: str | None = None
     x_url: str | None = None
     github_url: str | None = None
+    profile_status: dict[
+        str, Literal["found", "not_found", "rejected", "ambiguous", "search_failed"]
+    ] = Field(default_factory=dict)
     association: Literal["officially_listed", "publicly_reported"]
     technical_skills: list[str]
     activity_date: date | None = None

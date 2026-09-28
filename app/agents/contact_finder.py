@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from datetime import UTC, date, datetime
@@ -21,10 +22,26 @@ def profile_url(url: str) -> tuple[str, str] | None:
         path = parts.path.rstrip("/")
         if parts.scheme not in {"https", "http"} or parts.username or parts.password or parts.port:
             return None
-        if host == "linkedin.com" and re.fullmatch(r"/in/[\w%.-]+", path):
+        if (
+            host == "linkedin.com" or re.fullmatch(r"[a-z]{2}\.linkedin\.com", host)
+        ) and re.fullmatch(r"/in/[\w%.-]+", path):
+            host = "linkedin.com"
             field = "linkedin_url"
-        elif host in {"x.com", "twitter.com"} and re.fullmatch(r"/[\w]{1,15}", path):
-            if path.lower() in {"/home", "/search", "/explore", "/intent", "/settings"}:
+        elif host in {"x.com", "twitter.com", "mobile.twitter.com"} and re.fullmatch(
+            r"/[A-Za-z0-9_]{1,15}", path
+        ):
+            if path.lower() in {
+                "/home",
+                "/search",
+                "/explore",
+                "/intent",
+                "/settings",
+                "/login",
+                "/signup",
+                "/i",
+                "/share",
+                "/hashtag",
+            }:
                 return None
             host, field = "x.com", "x_url"
         elif host == "github.com" and re.fullmatch(r"/[\w-]+", path):
@@ -42,6 +59,83 @@ class ContactFinder:
     def __init__(self, fetcher, search, llm, limit=10, timeout=150):
         self.fetcher, self.search, self.llm = fetcher, search, llm
         self.limit, self.timeout = limit, timeout
+
+    async def enrich_profiles(self, contact, sources, company_domain):
+        """Resolve missing public profiles without guessing URLs or merging same-name accounts."""
+
+        def contains(value, text):
+            return bool(re.search(r"(?<!\w)" + re.escape(value) + r"(?!\w)", text, re.I))
+
+        for field, scope in [
+            ("linkedin_url", "site:linkedin.com/in"),
+            ("x_url", "(site:x.com OR site:twitter.com)"),
+        ]:
+            key = field.removesuffix("_url")
+            choices = {}
+            existing = getattr(contact, field)
+            if existing:
+                choices[existing] = None
+            # A named anchor on an official page directly ties the link to this person.
+            for source in sources:
+                host = (urlsplit(source.source_url).hostname or "").removeprefix("www.")
+                if not (host == company_domain or host.endswith("." + company_domain)):
+                    continue
+                for url, label in source.link_labels.items():
+                    parsed = profile_url(url)
+                    if parsed and parsed[0] == field and contains(contact.name, label):
+                        choices[parsed[1]] = ContactEvidence(
+                            source_url=source.source_url,
+                            quote=label,
+                            retrieved_at=source.retrieved_at,
+                        )
+            rejected, failed = False, False
+            if not choices:
+                query = (
+                    f"{scope} {json.dumps(contact.name)} "
+                    f"{json.dumps(contact.company)} {json.dumps(contact.role)}"
+                )
+                try:
+                    async with asyncio.timeout(min(8, self.timeout)):
+                        results = await self.search.search(query)
+                    for source in results:
+                        parsed = profile_url(source.source_url)
+                        if not parsed or parsed[0] != field:
+                            continue
+                        text = source.source_name + "\n" + source.text
+                        if not all(
+                            contains(value, text)
+                            for value in [contact.name, contact.company, contact.role]
+                        ) or re.search(r"\b(former|previously|ex-\w+)\b", text, re.I):
+                            rejected = True
+                            continue
+                        choices[parsed[1]] = ContactEvidence(
+                            source_url=source.source_url,
+                            quote=text,
+                            retrieved_at=source.retrieved_at,
+                        )
+                except (SearchError, TimeoutError):
+                    failed = True
+            if len(choices) > 1:
+                setattr(contact, field, None)
+                contact.profile_status[key] = "ambiguous"
+                contact.warnings.append(f"{key.upper()}_PROFILE_AMBIGUOUS")
+            elif choices:
+                url, evidence = next(iter(choices.items()))
+                setattr(contact, field, url)
+                contact.profile_status[key] = "found"
+                if evidence:
+                    contact.evidence.append(evidence)
+                    contact.source_urls = list(
+                        dict.fromkeys(contact.source_urls + [evidence.source_url])
+                    )
+            else:
+                contact.profile_status[key] = (
+                    "search_failed"
+                    if failed
+                    else "rejected"
+                    if rejected or "UNSUPPORTED_PROFILE_URL_DROPPED" in contact.warnings
+                    else "not_found"
+                )
 
     async def discover(self, company, target_skills: list[str], run_id: str):
         sources, warnings = [], []
@@ -97,7 +191,8 @@ class ContactFinder:
                             "Company may be implicit on official team pages; otherwise quote it. "
                             "Do not invent profiles or merge people. Each profile needs a source "
                             "ID and exact quote identifying the person. Copy only URLs found in "
-                            "that source URL or quote. Unknown profiles are empty lists. "
+                            "that source URL, quote, or an official team page's link_labels "
+                            "whose anchor names the person. Unknown profiles are empty lists. "
                             "Technical skills must appear in the candidate quote. "
                             "Activity needs an ISO date literally in a quote naming the person; "
                             "otherwise all activity fields are null. Retrieval is not activity. "
@@ -160,14 +255,35 @@ class ContactFinder:
             for reference in candidate.profiles:
                 supporting = by_id.get(reference.source_id)
                 parsed = profile_url(reference.url)
+                profile_host = (
+                    (urlsplit(supporting.source_url).hostname or "").removeprefix("www.")
+                    if supporting
+                    else ""
+                )
+                official_profile_source = profile_host == domain or profile_host.endswith(
+                    "." + domain
+                )
                 if (
                     not parsed
                     or not supporting
                     or not quote_in_text(reference.source_quote, supporting.text)
                     or candidate.name.casefold() not in reference.source_quote.casefold()
+                    or (
+                        not official_profile_source
+                        and (
+                            name.casefold() not in reference.source_quote.casefold()
+                            or candidate.role.casefold() not in reference.source_quote.casefold()
+                        )
+                    )
                     or not (
                         reference.url == supporting.source_url
                         or reference.url in reference.source_quote
+                        or (
+                            (urlsplit(supporting.source_url).hostname or "").removeprefix("www.")
+                            == domain
+                            and candidate.name.casefold()
+                            in supporting.link_labels.get(reference.url, "").casefold()
+                        )
                     )
                 ):
                     contact_warnings.append("UNSUPPORTED_PROFILE_URL_DROPPED")
@@ -227,6 +343,19 @@ class ContactFinder:
                 )
             )
         ranked = rank_contacts(deduplicate_contacts(contacts), target_skills, self.limit)
+        try:
+            async with asyncio.timeout(min(30, self.timeout / 3)):
+                for contact in ranked:
+                    await self.enrich_profiles(
+                        contact, sources, company.company_domain.removeprefix("www.")
+                    )
+        except TimeoutError:
+            for contact in ranked:
+                for platform in ("linkedin", "x"):
+                    contact.profile_status.setdefault(
+                        platform,
+                        "found" if getattr(contact, platform + "_url") else "search_failed",
+                    )
         if not ranked:
             warnings.append("NO_SUPPORTED_CONTACTS_FOUND")
         return ranked, list(dict.fromkeys(warnings))

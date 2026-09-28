@@ -124,3 +124,82 @@ async def test_no_public_sources(finder):
 )
 def test_non_profile_urls_rejected(url):
     assert profile_url(url) is None
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        (
+            "https://uk.linkedin.com/in/alice?trk=test",
+            ("linkedin_url", "https://linkedin.com/in/alice"),
+        ),
+        ("https://mobile.twitter.com/alice", ("x_url", "https://x.com/alice")),
+        ("https://linkedin.com.evil.test/in/alice", None),
+        ("https://x.com/login", None),
+    ],
+)
+def test_profile_variants(url, expected):
+    assert profile_url(url) == expected
+
+
+async def test_official_named_anchor_used_without_url_in_text(finder):
+    finder.fetcher.fetch.return_value = (
+        source(
+            link_labels={
+                "https://linkedin.com/in/alice": "Alice Smith",
+                "https://x.com/alice": "Alice Smith on X",
+                "https://x.com/bob": "Bob Smith",
+            }
+        ),
+        [],
+    )
+    contacts, _ = await finder.discover(company_report(), [], "run")
+    assert contacts[0].linkedin_url == "https://linkedin.com/in/alice"
+    assert contacts[0].x_url == "https://x.com/alice"
+    assert contacts[0].profile_status == {"linkedin": "found", "x": "found"}
+
+
+async def test_person_specific_search_enriches_missing_profile(finder):
+    async def search(query):
+        if '"Alice Smith"' in query and "linkedin" in query:
+            return [source(source_url="https://uk.linkedin.com/in/alice", kind="search")]
+        return []
+
+    finder.search.search.side_effect = search
+    contacts, _ = await finder.discover(company_report(), [], "run")
+    assert contacts[0].linkedin_url == "https://linkedin.com/in/alice"
+    assert contacts[0].profile_status["x"] == "not_found"
+
+
+async def test_same_name_wrong_employer_rejected(finder):
+    async def search(query):
+        if '"Alice Smith"' in query:
+            return [
+                source(
+                    source_url="https://linkedin.com/in/alice",
+                    text="Alice Smith is CTO at Other Company",
+                    source_name="Alice Smith — Other Company",
+                    kind="search",
+                )
+            ]
+        return []
+
+    finder.search.search.side_effect = search
+    contacts, _ = await finder.discover(company_report(), [], "run")
+    assert contacts[0].linkedin_url is None
+    assert contacts[0].profile_status["linkedin"] == "rejected"
+
+
+async def test_conflicting_named_accounts_are_ambiguous(finder):
+    finder.fetcher.fetch.return_value = (
+        source(
+            link_labels={
+                "https://x.com/alice1": "Alice Smith",
+                "https://x.com/alice2": "Alice Smith",
+            }
+        ),
+        [],
+    )
+    contacts, _ = await finder.discover(company_report(), [], "run")
+    assert contacts[0].x_url is None
+    assert contacts[0].profile_status["x"] == "ambiguous"

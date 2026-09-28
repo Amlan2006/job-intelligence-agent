@@ -2,6 +2,15 @@
 
 ## Luthor frontend
 
+Contact discovery enriches missing LinkedIn and X profiles using bounded
+person/company/role searches, including Twitter URL variants. Official team-page
+links must name the person; search profiles must match name, company, and role.
+Conflicting accounts are withheld as ambiguous. Profile status distinguishes
+not found, rejected, ambiguous, and search failed. Enrichment has a 30-second
+maximum budget (or one-third of the contact timeout, whichever is smaller), and
+keeps discovered contacts if profile search times out. Existing saved contact
+snapshots are unchanged until contact discovery is run again.
+
 ### Job-board-first discovery
 
 In Discover, select **Job boards → funding check** (or send `source: "job_boards"`

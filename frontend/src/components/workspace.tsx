@@ -579,12 +579,21 @@ export default function Workspace() {
           {safeUrl(contact.linkedin_url) ? (
             <OutLink url={contact.linkedin_url}>LinkedIn</OutLink>
           ) : (
-            <span className="muted">LinkedIn not found</span>
+            <span className="muted">
+              LinkedIn{" "}
+              {(contact.profile_status?.linkedin || "not_found").replaceAll(
+                "_",
+                " ",
+              )}
+            </span>
           )}
           {safeUrl(contact.x_url) ? (
             <OutLink url={contact.x_url}>X</OutLink>
           ) : (
-            <span className="muted">X not found</span>
+            <span className="muted">
+              X{" "}
+              {(contact.profile_status?.x || "not_found").replaceAll("_", " ")}
+            </span>
           )}
           {safeUrl(contact.github_url) && (
             <OutLink url={contact.github_url}>GitHub</OutLink>

@@ -19,6 +19,10 @@ export type Company = {
   warnings: string[];
 };
 export type Contact = {
+  profile_status?: Record<
+    string,
+    "found" | "not_found" | "rejected" | "ambiguous" | "search_failed"
+  >;
   name: string;
   role: string;
   company: string;
