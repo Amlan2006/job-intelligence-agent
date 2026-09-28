@@ -114,7 +114,9 @@ class EmbeddingRepository:
                     )
                 )
             ).all()
-            return {row.text: row.embedding.tolist() for row in rows}
+            # pgvector results may be plain lists or NumPy arrays, depending on
+            # the database driver/type adapter. Normalize both to Python floats.
+            return {row.text: [float(value) for value in row.embedding] for row in rows}
 
     async def save(self, vectors: dict[str, list[float]], model: str):
         if not vectors:

@@ -29,7 +29,7 @@ def score_opportunity(opportunity, funding, now=None):
     )
     if not funding_associated:
         warnings.append("FUNDING_COMPANY_NAME_UNVERIFIED: funding credit withheld")
-    if funding.announced_at and funding_associated:
+    if funding.funding_status == "verified" and funding.announced_at and funding_associated:
         age = (now - funding.announced_at).total_seconds() / 86400
         if age >= 0:
             components["recent_funding"] = 1 if age <= 30 else 0.5 if age <= 90 else 0

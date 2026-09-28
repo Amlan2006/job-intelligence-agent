@@ -1,6 +1,58 @@
 import { test, expect } from "@playwright/test";
 import { previewOpportunities, previewResume } from "../src/lib/preview";
 
+test("job-board discovery submits selected source and shows unverified funding notes", async ({
+  page,
+}) => {
+  let submitted: Record<string, unknown> | undefined;
+  await page.route("**/api/backend/**", async (route) => {
+    const url = route.request().url();
+    if (url.endsWith("/discovery/run")) {
+      submitted = route.request().postDataJSON();
+      return route.fulfill({
+        json: {
+          discovery_id: "test-run",
+          source: "job_boards",
+          started_at: new Date().toISOString(),
+          status: "completed",
+          results: [],
+          skipped_cached: 0,
+          warnings: ["RECENT_FUNDING_NOT_VERIFIED: Example Labs"],
+        },
+      });
+    }
+    if (url.includes("/opportunities?"))
+      return route.fulfill({ json: previewOpportunities });
+    if (url.includes("/resume/")) return route.fulfill({ json: previewResume });
+    if (url.includes("/discovery/runs?")) return route.fulfill({ json: [] });
+    return route.fulfill({ json: { status: "ready" } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Use my workspace" }).click();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Discover", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Start discovery", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Start discovery", exact: true })
+    .click();
+  await expect(
+    page.getByText("Discovery completed. 0 companies found; 0 researched."),
+  ).toBeVisible();
+  expect(submitted?.source).toBe("job_boards");
+  expect(submitted?.lookback_days).toBe(90);
+  await expect(
+    page.getByText("This does not mean no jobs exist.", { exact: false }),
+  ).toBeVisible();
+  await page.locator(".warnings summary").click();
+  await expect(
+    page.getByText("RECENT FUNDING NOT VERIFIED: Example Labs"),
+  ).toBeVisible();
+});
+
 test("contact profiles show separate LinkedIn and X links in both views", async ({
   page,
 }) => {
@@ -202,6 +254,9 @@ test("mobile navigation and dialogs fit the viewport", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Discover", exact: true }),
   ).toBeVisible();
+  await expect(page.getByLabel("Discovery source")).toHaveValue("job_boards");
+  await page.getByLabel("Discovery source").selectOption("tavily");
+  await expect(page.getByLabel("Discovery source")).toHaveValue("tavily");
   await page.getByRole("button", { name: "Explore sample discovery" }).click();
   await expect(
     page.getByText("Sample discovery is complete.", { exact: false }),

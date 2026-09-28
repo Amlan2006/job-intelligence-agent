@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     defillama_api_key: SecretStr = SecretStr("")
     funding_discovery_timeout_seconds: float = Field(default=240, gt=0)
     discovery_company_timeout_seconds: float = Field(default=600, gt=0)
+    job_board_domains: list[str] = Field(
+        default_factory=lambda: [
+            "web3.career",
+            "cryptojobslist.com",
+            "jobs.lever.co",
+            "job-boards.greenhouse.io",
+            "jobs.ashbyhq.com",
+        ]
+    )
+    job_board_candidate_limit: int = Field(default=5, ge=1, le=10)
+    job_board_timeout_seconds: float = Field(default=600, gt=0)
 
 
 @lru_cache

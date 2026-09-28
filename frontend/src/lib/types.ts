@@ -81,6 +81,7 @@ export type Resume = {
   };
 };
 export type Discovery = {
+  source?: string;
   discovery_id: string;
   status: string;
   started_at: string;
@@ -89,6 +90,10 @@ export type Discovery = {
   results: {
     status: string;
     funding: {
+      funding_status?: "verified" | "unverified";
+      company_url?: string | null;
+      website_status?: "verified" | "unverified" | "unreachable";
+      job_url?: string | null;
       company_name: string;
       amount_usd: number | null;
       round_type: string | null;

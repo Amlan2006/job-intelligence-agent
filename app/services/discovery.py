@@ -62,13 +62,32 @@ class DiscoveryService:
                 eligible = [
                     r
                     for r in rounds
-                    if r.announced_at
-                    and cutoff <= r.announced_at <= report.started_at
-                    and (not categories or name_key(r.category or "") in categories)
+                    if (
+                        r.funding_status == "unverified"
+                        and r.company_url
+                        or r.announced_at
+                        and cutoff <= r.announced_at <= report.started_at
+                    )
+                    and (
+                        r.funding_status == "unverified"
+                        or not categories
+                        or name_key(r.category or "") in categories
+                    )
                 ]
-                eligible.sort(key=lambda r: (r.announced_at, r.funding_key), reverse=True)
+                eligible.sort(
+                    key=lambda r: (
+                        r.funding_status == "verified",
+                        r.announced_at.timestamp() if r.announced_at else 0,
+                        r.funding_key,
+                    ),
+                    reverse=True,
+                )
                 if not eligible:
-                    report.warnings.append("NO_FUNDING_MATCHES: check dates and category filters")
+                    report.warnings.append(
+                        "NO_VERIFIED_RECENTLY_FUNDED_EMPLOYERS: review job-board research notes"
+                        if payload.source == "job_boards"
+                        else "NO_FUNDING_MATCHES: check dates and category filters"
+                    )
                 targets = {name_key(k): v for k, v in payload.targets.items()}
                 companies, attempted = set(), 0
                 for funding in eligible:
@@ -86,6 +105,22 @@ class DiscoveryService:
                     if identity in companies:
                         continue  # Most recent eligible round per company per run.
                     companies.add(identity)
+                    if (
+                        funding.provider == "job_boards"
+                        and url
+                        and funding.website_status != "verified"
+                    ):
+                        report.results.append(
+                            DiscoveryResult(
+                                funding=funding,
+                                status="discovered",
+                                warnings=[
+                                    f"WEBSITE_{funding.website_status.upper()}: "
+                                    "review before research"
+                                ],
+                            )
+                        )
+                        continue
                     if not url:
                         if sum(r.status == "unresolved" for r in report.results) < 20:
                             report.results.append(
@@ -96,7 +131,7 @@ class DiscoveryService:
                                 )
                             )
                         continue
-                    job_url = str(target.job_url) if target and target.job_url else None
+                    job_url = str(target.job_url) if target and target.job_url else funding.job_url
                     key = hashlib.sha256(
                         f"v1:{resume.resume_id}:{funding.funding_key}:{domain}:{job_url}".encode()
                     ).hexdigest()
@@ -104,7 +139,14 @@ class DiscoveryService:
                         report.skipped_cached += 1
                         continue
                     if attempted >= payload.limit:
-                        break
+                        report.results.append(
+                            DiscoveryResult(
+                                funding=funding,
+                                status="discovered",
+                                warnings=["RESEARCH_LIMIT_REACHED"],
+                            )
+                        )
+                        continue
                     attempted += 1
                     run_id = uuid4()
                     token = inference_events.set([])
@@ -169,7 +211,10 @@ class DiscoveryService:
                 await self.repository.save(report)
                 raise
             report.results.sort(
-                key=lambda r: r.ranking.score if r.ranking and r.ranking.score is not None else -1,
+                key=lambda r: (
+                    r.funding.funding_status == "verified",
+                    r.ranking.score if r.ranking and r.ranking.score is not None else -1,
+                ),
                 reverse=True,
             )
             report.finished_at = datetime.now(UTC)

@@ -2,6 +2,42 @@
 
 ## Luthor frontend
 
+### Job-board-first discovery
+
+In Discover, select **Job boards → funding check** (or send `source: "job_boards"`
+to the existing discovery endpoint). Tavily searches configured public job-board
+domains, reads up to ten search-result pages and follows up to ten observed job
+links from those pages. Employer, role, and hiring excerpts are validated
+independently against the same individual listing. Index pages are not employers.
+Company websites are resolved separately: observed website links must lead to a
+page naming the employer; search-only candidates also need a reciprocal link to
+the original listing. Unresolved websites do not prevent funding searches, but
+cannot be used to join a funding event to an employer. Research notes identify
+invalid employer/role/hiring evidence, closed jobs, unreadable pages, and unresolved
+websites instead of reporting simply “no jobs found.” It then
+searches funding announcements for up to `JOB_BOARD_CANDIDATE_LIMIT` employers.
+Companies with observed website links remain visible even if the website cannot
+be verified or fetched. Website status is recorded separately as `verified`,
+`unverified`, or `unreachable`. Only URLs actually observed in listing links are
+retained on verification failure; guessed URLs and uncorroborated search hits are
+not promoted to company websites. Unverified/unreachable websites are displayed
+as `discovered` for review without automatic full company research.
+Companies with verified websites remain eligible for research even when recent funding cannot
+be verified (including failed funding searches). Their funding status is explicitly
+`unverified`, with no invented amount/date or funding-score credit. Verified-funded
+companies are researched and displayed first, followed by unverified companies.
+Companies beyond the research limit remain visible as `discovered`. The original
+listing becomes the job-analysis URL; website, listing, and applicable funding-source
+links appear in discovery results. Old saved runs are not retroactively populated.
+
+Configure `JOB_BOARD_DOMAINS` as a JSON list of domains in `.env`, plus
+`JOB_BOARD_CANDIDATE_LIMIT` and `JOB_BOARD_TIMEOUT_SECONDS` to control cost/runtime.
+This uses search-indexed public pages, not authenticated board APIs or browser
+scraping. Blocked/JavaScript-only listings may be unreadable, and listing presence
+does not guarantee an opening remains active. Missing funding evidence is reported
+as **not verified**, never as proof that a company is unfunded. Existing strict
+announcement-date and official-website evidence checks still apply.
+
 Service destinations are configurable: the frontend requires `BACKEND_URL` in
 `frontend/.env.local`; `APP_ORIGIN` optionally pins its public browser origin.
 Backend provider endpoints use `GROQ_CHAT_URL`, `TAVILY_SEARCH_URL`,

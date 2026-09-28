@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
 class FundingRound(BaseModel):
+    funding_status: Literal["verified", "unverified"] = "verified"
     provider: str = "defillama"
     evidence: dict[str, str] = Field(default_factory=dict)
     funding_key: str
@@ -19,6 +20,8 @@ class FundingRound(BaseModel):
     source_url: str
     company_url: str | None = None
     website_basis: str | None = None
+    website_status: Literal["verified", "unverified", "unreachable"] = "unverified"
+    job_url: str | None = None
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -30,7 +33,7 @@ class DiscoveryTarget(BaseModel):
 
 class DiscoveryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    source: Literal["tavily", "defillama"] = "tavily"
+    source: Literal["tavily", "defillama", "job_boards"] = "tavily"
     resume_id: UUID
     lookback_days: int = Field(default=90, ge=1, le=365)
     limit: int = Field(default=3, ge=1, le=10)
@@ -49,7 +52,7 @@ class OpportunityScore(BaseModel):
 
 class DiscoveryResult(BaseModel):
     funding: FundingRound
-    status: Literal["analyzed", "unresolved", "failed"]
+    status: Literal["analyzed", "unresolved", "failed", "discovered"]
     opportunity_id: UUID | None = None
     ranking: OpportunityScore | None = None
     warnings: list[str] = Field(default_factory=list)

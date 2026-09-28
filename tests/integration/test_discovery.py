@@ -35,6 +35,70 @@ async def test_resume_scoped_cache_force_refresh_and_bounded_research():
     assert runner.graph.ainvoke.await_count == 3
 
 
+async def test_job_board_source_passes_listing_to_opportunity_graph():
+    runner, resume = service()
+    source = runner.source
+    source.fetch.return_value[0][0].job_url = "https://board.example/jobs/engineer"
+    runner.source = {"job_boards": source}
+    report = await runner.run(DiscoveryRequest(resume_id=resume.resume_id, source="job_boards"))
+    assert report.source == "job_boards"
+    assert (
+        runner.graph.ainvoke.call_args.args[0]["job_url"] == "https://board.example/jobs/engineer"
+    )
+    runner.jobs.find.assert_not_called()
+
+
+async def test_verified_first_and_unverified_visible_beyond_research_limit():
+    runner, resume = service()
+    runner.source.fetch.return_value = (
+        [
+            funding(
+                funding_status="unverified",
+                funding_key="unknown",
+                company_name="Other",
+                company_url="https://other.example",
+                announced_at=None,
+            ),
+            funding(),
+        ],
+        [],
+    )
+    report = await runner.run(DiscoveryRequest(resume_id=resume.resume_id, limit=1))
+    assert [r.funding.funding_status for r in report.results] == ["verified", "unverified"]
+    assert report.results[1].status == "discovered"
+    assert runner.graph.ainvoke.await_count == 1
+
+
+async def test_unverified_can_be_researched_without_funding_credit():
+    runner, resume = service()
+    runner.source.fetch.return_value = (
+        [funding(funding_status="unverified", announced_at=None)],
+        [],
+    )
+    report = await runner.run(DiscoveryRequest(resume_id=resume.resume_id))
+    assert report.results[0].status == "analyzed"
+    assert report.results[0].ranking.components["recent_funding"] is None
+
+
+async def test_unreachable_observed_website_remains_visible_without_research():
+    runner, resume = service()
+    runner.source.fetch.return_value = (
+        [
+            funding(
+                provider="job_boards",
+                website_status="unreachable",
+                funding_status="unverified",
+                announced_at=None,
+            )
+        ],
+        [],
+    )
+    report = await runner.run(DiscoveryRequest(resume_id=resume.resume_id))
+    assert report.results[0].status == "discovered"
+    assert report.results[0].funding.company_url
+    runner.graph.ainvoke.assert_not_called()
+
+
 async def test_filter_duplicates_recent_category_future_and_unresolved():
     runner, resume = service()
     runner.source.fetch.return_value = (

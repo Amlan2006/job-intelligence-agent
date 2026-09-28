@@ -11,6 +11,7 @@ from app.agents.company_research import CompanyResearchAgent
 from app.agents.contact_finder import ContactFinder
 from app.agents.funding_discovery import TavilyFunding
 from app.agents.job_analyzer import JobAnalyzer
+from app.agents.job_board_discovery import JobBoardFunding
 from app.agents.outreach_writer import OutreachWriter
 from app.agents.resume_analyzer import ResumeAnalyzer
 from app.api.routes_company import router as company_routes
@@ -128,6 +129,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.discovery_repository = DiscoveryRepository(sessions)
                 application.state.discovery_service = DiscoveryService(
                     {
+                        "job_boards": JobBoardFunding(
+                            TavilySearch(
+                                client,
+                                settings.tavily_api_key.get_secret_value(),
+                                url=settings.tavily_search_url,
+                            ),
+                            WebpageFetcher(client),
+                            router,
+                            TavilyFunding(
+                                TavilySearch(
+                                    client,
+                                    settings.tavily_api_key.get_secret_value(),
+                                    url=settings.tavily_search_url,
+                                ),
+                                WebpageFetcher(client),
+                                router,
+                                settings.funding_discovery_timeout_seconds,
+                            ),
+                            settings.job_board_domains,
+                            settings.job_board_candidate_limit,
+                            settings.job_board_timeout_seconds,
+                        ),
                         "tavily": TavilyFunding(
                             TavilySearch(
                                 client,

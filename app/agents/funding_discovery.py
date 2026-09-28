@@ -130,16 +130,18 @@ class TavilyFunding:
     def __init__(self, search, fetcher, llm, timeout=240):
         self.search, self.fetcher, self.llm, self.timeout = search, fetcher, llm, timeout
 
-    async def fetch(self, *, lookback_days=90, categories=(), research_run_id="discovery"):
+    async def fetch(
+        self, *, lookback_days=90, categories=(), research_run_id="discovery", company_name=None
+    ):
         if not self.search.api_key:
             raise FundingSourceError("TAVILY_API_KEY_REQUIRED")
         try:
             async with asyncio.timeout(self.timeout):
-                return await self._fetch(lookback_days, categories, research_run_id)
+                return await self._fetch(lookback_days, categories, research_run_id, company_name)
         except (TimeoutError, LLMFailure):
             raise FundingSourceError("FUNDING_DISCOVERY_FAILED") from None
 
-    async def _fetch(self, lookback_days, categories, run_id):
+    async def _fetch(self, lookback_days, categories, run_id, company_name=None):
         now = datetime.now(UTC)
         queries = [
             "web3 startup announced raised seed funding",
@@ -148,6 +150,8 @@ class TavilyFunding:
         ]
         if categories:
             queries[-1] = "web3 " + " ".join(categories)[:200] + " startup funding announcement"
+        if company_name:
+            queries = [f"{json.dumps(company_name[:160])} raised funding announcement date"]
         urls, warnings = [], []
         successful_searches = 0
         for query in queries:

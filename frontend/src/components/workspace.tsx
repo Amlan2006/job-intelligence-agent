@@ -457,13 +457,13 @@ export default function Workspace() {
     }
     const form = new FormData(e.currentTarget);
     setBusy(
-      "Searching funding announcements and researching new opportunities",
+      "Searching public sources, verifying funding, and researching new opportunities",
     );
     setError("");
     try {
       const result = await api<Discovery>("api/v1/discovery/run", {
         resume_id: resume.resume_id,
-        source: "tavily",
+        source: form.get("source") || "tavily",
         lookback_days: Number(form.get("days")),
         limit: Number(form.get("limit")),
         categories: form.get("category") ? [form.get("category")] : [],
@@ -473,7 +473,7 @@ export default function Workspace() {
         await api<Opportunity[]>("api/v1/opportunities?limit=100"),
       );
       setNotice(
-        `Discovery ${result.status}. ${result.results.filter((r) => r.status === "analyzed").length} companies researched.`,
+        `Discovery ${result.status}. ${result.results.length} companies found; ${result.results.filter((r) => r.status === "analyzed").length} researched.`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -1179,6 +1179,17 @@ export default function Workspace() {
                 </div>
                 <form onSubmit={discover}>
                   <label>
+                    Discovery source
+                    <select name="source" defaultValue="job_boards">
+                      <option value="job_boards">
+                        Job boards → funding check
+                      </option>
+                      <option value="tavily">
+                        Funding announcements first
+                      </option>
+                    </select>
+                  </label>
+                  <label>
                     Funding announced within
                     <select name="days" defaultValue="90">
                       <option value="30">The last 30 days</option>
@@ -1247,10 +1258,32 @@ export default function Workspace() {
                           <div>
                             <strong>{r.funding.company_name}</strong>
                             <span>
-                              {money(r.funding.amount_usd)} ·{" "}
-                              {r.funding.round_type || "Round unknown"} ·{" "}
-                              {r.status}
+                              {r.funding.funding_status === "unverified"
+                                ? "Funding unverified"
+                                : `Funding verified · ${money(r.funding.amount_usd)} · ${r.funding.round_type || "Round unknown"}`}{" "}
+                              · {r.status}
                             </span>
+                            {r.funding.company_url && (
+                              <OutLink url={r.funding.company_url}>
+                                Company website
+                              </OutLink>
+                            )}
+                            {r.funding.company_url && (
+                              <span>
+                                Website{" "}
+                                {r.funding.website_status || "unverified"}
+                              </span>
+                            )}
+                            <OutLink url={r.funding.source_url}>
+                              {r.funding.funding_status === "unverified"
+                                ? "Discovery source"
+                                : "Funding source"}
+                            </OutLink>
+                            {r.funding.job_url && (
+                              <OutLink url={r.funding.job_url}>
+                                Job listing
+                              </OutLink>
+                            )}
                           </div>
                           <div>
                             {r.ranking?.score != null && (
@@ -1282,8 +1315,9 @@ export default function Workspace() {
                       ))}
                       {!run.results.length && (
                         <p className="muted">
-                          No new results in this run. Previously researched
-                          companies are skipped.
+                          {run.source === "job_boards"
+                            ? "No new companies with supported website links in this run. This does not mean no jobs exist. Expand the research notes below for page, employer, website, and funding-check details."
+                            : "No new results in this run. Check research notes and the already-researched count above."}
                         </p>
                       )}
                       <Warnings items={run.warnings} />
