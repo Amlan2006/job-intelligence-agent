@@ -18,7 +18,11 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
       `Request failed (${response.status})`;
     const messages: Record<string, string> = {
       BACKEND_UNAVAILABLE:
-        "Your backend is offline. Start FastAPI on port 8000, then reconnect.",
+        "Your backend is offline. Check BACKEND_URL and start the backend, then reconnect.",
+      BACKEND_NOT_CONFIGURED:
+        "Set BACKEND_URL in frontend/.env.local, then restart the frontend.",
+      INVALID_ORIGIN:
+        "This request came from a different app origin. Check APP_ORIGIN in the frontend configuration.",
       PDF_SIZE_LIMIT: "Please choose a PDF smaller than 10 MB.",
       RESUME_NOT_FOUND: "This resume is no longer available. Upload it again.",
       DISCOVERY_ALREADY_RUNNING:

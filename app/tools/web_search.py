@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from app.config import get_settings
 from app.schemas.evidence import Source
 
 
@@ -16,15 +17,23 @@ class SearchProvider(Protocol):
 
 
 class TavilySearch:
-    def __init__(self, client: httpx.AsyncClient, api_key: str, timeout: float = 15):
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        api_key: str,
+        timeout: float = 15,
+        *,
+        url: str | None = None,
+    ):
         self.client, self.api_key, self.timeout = client, api_key, timeout
+        self.url = url or get_settings().tavily_search_url
 
     async def search(self, query: str, *, start_date=None, end_date=None) -> list[Source]:
         if not self.api_key:
             raise SearchError("Search provider is not configured")
         try:
             response = await self.client.post(
-                "https://api.tavily.com/search",
+                self.url,
                 json={
                     "query": query,
                     "max_results": 5,

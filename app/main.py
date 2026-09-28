@@ -70,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         settings.groq_api_key.get_secret_value(),
                         settings.groq_model,
                         settings.groq_timeout_seconds,
+                        url=settings.groq_chat_url,
                     ),
                     timeout=settings.codex_timeout_seconds,
                     fallback_timeout=settings.groq_timeout_seconds,
@@ -79,7 +80,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.company_graph = build_company_graph(
                     CompanyResearchAgent(
                         WebpageFetcher(client),
-                        TavilySearch(client, settings.tavily_api_key.get_secret_value()),
+                        TavilySearch(
+                            client,
+                            settings.tavily_api_key.get_secret_value(),
+                            url=settings.tavily_search_url,
+                        ),
                         router,
                     ),
                     DEFAULT_WEIGHTS | settings.company_score_weights,
@@ -97,7 +102,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 application.state.contact_finder = ContactFinder(
                     WebpageFetcher(client),
-                    TavilySearch(client, settings.tavily_api_key.get_secret_value()),
+                    TavilySearch(
+                        client,
+                        settings.tavily_api_key.get_secret_value(),
+                        url=settings.tavily_search_url,
+                    ),
                     router,
                     settings.contact_limit,
                     settings.contact_timeout_seconds,
@@ -120,13 +129,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.discovery_service = DiscoveryService(
                     {
                         "tavily": TavilyFunding(
-                            TavilySearch(client, settings.tavily_api_key.get_secret_value()),
+                            TavilySearch(
+                                client,
+                                settings.tavily_api_key.get_secret_value(),
+                                url=settings.tavily_search_url,
+                            ),
                             WebpageFetcher(client),
                             router,
                             settings.funding_discovery_timeout_seconds,
                         ),
                         "defillama": DefiLlamaFunding(
-                            client, settings.defillama_api_key.get_secret_value()
+                            client, settings.defillama_api_key.get_secret_value(), settings=settings
                         ),
                     },
                     application.state.discovery_repository,

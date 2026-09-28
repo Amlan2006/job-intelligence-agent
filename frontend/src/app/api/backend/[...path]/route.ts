@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { validRequestOrigin } from "../../../../lib/request-origin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
@@ -16,8 +17,7 @@ async function proxy(
       { detail: { code: "UNKNOWN_ENDPOINT" } },
       { status: 404 },
     );
-  const origin = request.headers.get("origin");
-  if (request.method !== "GET" && origin && origin !== request.nextUrl.origin) {
+  if (!validRequestOrigin(request, process.env.APP_ORIGIN)) {
     return Response.json(
       { detail: { code: "INVALID_ORIGIN" } },
       { status: 403 },
@@ -34,10 +34,13 @@ async function proxy(
         { detail: { code: "PDF_SIZE_LIMIT" } },
         { status: 413 },
       );
-    const base = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(
-      /\/$/,
-      "",
-    );
+    if (!process.env.BACKEND_URL) {
+      return Response.json(
+        { detail: { code: "BACKEND_NOT_CONFIGURED" } },
+        { status: 503 },
+      );
+    }
+    const base = process.env.BACKEND_URL.replace(/\/$/, "");
     const response = await fetch(`${base}/${route}${request.nextUrl.search}`, {
       method: request.method,
       headers,
@@ -60,7 +63,7 @@ async function proxy(
         detail: {
           code: "BACKEND_UNAVAILABLE",
           message:
-            "Could not reach your workspace. Start the backend on port 8000 and try again.",
+            "Could not reach the configured backend. Check BACKEND_URL and the backend service.",
         },
       },
       { status: 503 },

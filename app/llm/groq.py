@@ -1,14 +1,24 @@
 import httpx
 from pydantic import BaseModel
 
+from app.config import get_settings
 from app.llm.base import Message, ProviderResponse
 
 
 class GroqProvider:
     name = "groq"
 
-    def __init__(self, client: httpx.AsyncClient, api_key: str, model: str, timeout: float):
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        api_key: str,
+        model: str,
+        timeout: float,
+        *,
+        url: str | None = None,
+    ):
         self.client, self.api_key, self.model, self.timeout = client, api_key, model, timeout
+        self.url = url or get_settings().groq_chat_url
 
     async def invoke(
         self,
@@ -31,7 +41,7 @@ class GroqProvider:
             )
             payload["response_format"] = {"type": "json_object"}
         response = await self.client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            self.url,
             headers={"Authorization": f"Bearer {self.api_key}"},
             json=payload,
             timeout=self.timeout,

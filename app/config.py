@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     codex_timeout_seconds: float = Field(default=120, gt=0)
     groq_api_key: SecretStr = SecretStr("")
     groq_model: str = ""
+    groq_chat_url: str = "https://api.groq.com/openai/v1/chat/completions"
+    tavily_search_url: str = "https://api.tavily.com/search"
+    defillama_pro_base_url: str = "https://pro-api.llama.fi"
+    defillama_protocols_url: str = "https://api.llama.fi/protocols"
+    defillama_raises_url: str = "https://defillama.com/raises"
     groq_timeout_seconds: float = Field(default=30, gt=0)
     log_level: str = "INFO"
     tavily_api_key: SecretStr = SecretStr("")

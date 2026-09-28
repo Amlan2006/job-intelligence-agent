@@ -2,6 +2,13 @@
 
 ## Luthor frontend
 
+Service destinations are configurable: the frontend requires `BACKEND_URL` in
+`frontend/.env.local`; `APP_ORIGIN` optionally pins its public browser origin.
+Backend provider endpoints use `GROQ_CHAT_URL`, `TAVILY_SEARCH_URL`,
+`DEFILLAMA_PRO_BASE_URL`, `DEFILLAMA_PROTOCOLS_URL`, and `DEFILLAMA_RAISES_URL`.
+Their defaults are centralized in settings and documented in `.env.example`.
+Only configure trusted provider endpoints: requests can include API credentials.
+
 The responsive Luthor workspace is in [`frontend/`](frontend/README.md).
 Run `npm ci` and `npm run dev` from that directory, then open
 http://127.0.0.1:3000. It starts in a labeled preview mode; choose **Use my

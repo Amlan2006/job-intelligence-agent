@@ -38,7 +38,10 @@ def public_shape(value):
     return None
 
 
-def normalize_raises(rows, protocols):
+def normalize_raises(rows, protocols, source_url=None):
+    from app.config import get_settings
+
+    source_url = source_url or get_settings().defillama_raises_url
     if not isinstance(rows, list) or not isinstance(protocols, list):
         raise FundingSourceError("FUNDING_SOURCE_INVALID")
     by_id, by_name = {}, {}
@@ -109,7 +112,7 @@ def normalize_raises(rows, protocols):
             announced_at=announced,
             investors=list(dict.fromkeys(investors)),
             category=row.get("category") if isinstance(row.get("category"), str) else None,
-            source_url=public_shape(row.get("source")) or "https://defillama.com/raises",
+            source_url=public_shape(row.get("source")) or source_url,
             company_url=website,
             website_basis=basis if website else None,
             warnings=notes,
@@ -126,7 +129,10 @@ def normalize_raises(rows, protocols):
 
 
 class DefiLlamaFunding:
-    def __init__(self, client, api_key, timeout=30):
+    def __init__(self, client, api_key, timeout=30, *, settings=None):
+        from app.config import get_settings
+
+        self.settings = settings or get_settings()
         self.client, self.api_key, self.timeout = client, api_key, timeout
 
     async def _json(self, url):
@@ -152,17 +158,20 @@ class DefiLlamaFunding:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", self.api_key):
             raise FundingSourceError("DEFILLAMA_API_KEY_INVALID")
         data = await self._json(
-            f"https://pro-api.llama.fi/{quote(self.api_key, safe='')}/api/raises"
+            f"{self.settings.defillama_pro_base_url.rstrip('/')}/"
+            f"{quote(self.api_key, safe='')}/api/raises"
         )
         if not isinstance(data, dict) or not isinstance(data.get("raises"), list):
             raise FundingSourceError("FUNDING_SOURCE_INVALID")
         warnings = []
         try:
-            protocols = await self._json("https://api.llama.fi/protocols")
+            protocols = await self._json(self.settings.defillama_protocols_url)
             if not isinstance(protocols, list):
                 raise FundingSourceError("PROTOCOL_REGISTRY_INVALID")
         except FundingSourceError:
             protocols = []
             warnings.append("PROTOCOL_REGISTRY_UNAVAILABLE")
-        rounds, invalid = normalize_raises(data["raises"], protocols)
+        rounds, invalid = normalize_raises(
+            data["raises"], protocols, self.settings.defillama_raises_url
+        )
         return rounds, warnings + invalid
